@@ -145,6 +145,7 @@ export class BlueskyClient {
 
   // Create post
   async createPost(text: string, reply?: { root: { uri: string; cid: string }; parent: { uri: string; cid: string } }): Promise<{ uri: string; cid: string }> {
+    await this.ensureSession();
     const record: Record<string, unknown> = {
       $type: 'app.bsky.feed.post',
       text,
@@ -153,7 +154,7 @@ export class BlueskyClient {
     if (reply) record.reply = reply;
 
     return this.makeRequest('com.atproto.repo.createRecord', {
-      repo: this.did,
+      repo: this.did!,
       collection: 'app.bsky.feed.post',
       record,
     }, 'POST');
@@ -167,8 +168,9 @@ export class BlueskyClient {
 
   // Repost
   async repost(uri: string, cid: string): Promise<{ uri: string; cid: string }> {
+    await this.ensureSession();
     return this.makeRequest('com.atproto.repo.createRecord', {
-      repo: this.did,
+      repo: this.did!,
       collection: 'app.bsky.feed.repost',
       record: {
         $type: 'app.bsky.feed.repost',
@@ -195,8 +197,9 @@ export class BlueskyClient {
 
   // Like
   async likePost(uri: string, cid: string): Promise<{ uri: string; cid: string }> {
+    await this.ensureSession();
     return this.makeRequest('com.atproto.repo.createRecord', {
-      repo: this.did,
+      repo: this.did!,
       collection: 'app.bsky.feed.like',
       record: {
         $type: 'app.bsky.feed.like',
@@ -208,8 +211,9 @@ export class BlueskyClient {
 
   // Unlike
   async unlikePost(rkey: string): Promise<void> {
+    await this.ensureSession();
     await this.makeRequest('com.atproto.repo.deleteRecord', {
-      repo: this.did,
+      repo: this.did!,
       collection: 'app.bsky.feed.like',
       rkey,
     }, 'POST');
@@ -217,8 +221,9 @@ export class BlueskyClient {
 
   // Follow
   async followUser(did: string): Promise<{ uri: string; cid: string }> {
+    await this.ensureSession();
     return this.makeRequest('com.atproto.repo.createRecord', {
-      repo: this.did,
+      repo: this.did!,
       collection: 'app.bsky.graph.follow',
       record: {
         $type: 'app.bsky.graph.follow',
@@ -230,8 +235,9 @@ export class BlueskyClient {
 
   // Unfollow
   async unfollowUser(rkey: string): Promise<void> {
+    await this.ensureSession();
     await this.makeRequest('com.atproto.repo.deleteRecord', {
-      repo: this.did,
+      repo: this.did!,
       collection: 'app.bsky.graph.follow',
       rkey,
     }, 'POST');
