@@ -138,8 +138,89 @@ export class BlueskyClient {
     return this.makeRequest('app.bsky.feed.getPostThread', { uri, depth });
   }
 
+  // Fetch URL metadata for external embed
+  async fetchUrlMeta(url: string): Promise<{ uri: string; title: string; description: string; thumb?: { $type: string; ref: { $link: string }; mimeType: string; size: number } }> {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'BlueskyMCP/1.0' },
+      redirect: 'follow',
+    });
+    const html = await res.text();
+
+    const og = (prop: string): string => {
+      const m = html.match(new RegExp(`<meta[^>]+property=["']og:${prop}["'][^>]+content=["']([^"']+)["']`, 'i'))
+        ?? html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:${prop}["']`, 'i'));
+      return m?.[1] ?? '';
+    };
+
+    const title = og('title') || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() || url;
+    const description = og('description') || '';
+    const thumbUrl = og('image');
+
+    let thumb: { $type: string; ref: { $link: string }; mimeType: string; size: number } | undefined;
+    if (thumbUrl) {
+      try {
+        const imgRes = await fetch(thumbUrl, { redirect: 'follow' });
+        const blob = await imgRes.arrayBuffer();
+        const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
+        await this.ensureSession();
+        const uploaded = await this.uploadBlob(new Uint8Array(blob), mimeType);
+        thumb = { $type: 'blob', ref: uploaded.ref, mimeType: uploaded.mimeType, size: uploaded.size };
+      } catch {
+        // Skip thumbnail if fetch/upload fails
+      }
+    }
+
+    return { uri: url, title, description, ...(thumb ? { thumb } : {}) };
+  }
+
+  // Upload a blob (for images/thumbnails)
+  async uploadBlob(data: Uint8Array, mimeType: string): Promise<{ ref: { $link: string }; mimeType: string; size: number }> {
+    await this.ensureSession();
+    const url = `${this.config.BLUESKY_PDS_URL}/xrpc/com.atproto.repo.uploadBlob`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.accessJwt}`,
+        'Content-Type': mimeType,
+      },
+      body: Buffer.from(data),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Failed to upload blob: ${res.status} ${body}`);
+    }
+
+    const result = (await res.json()) as { blob: { ref: { $link: string }; mimeType: string; size: number } };
+    return result.blob;
+  }
+
+  // Detect URLs in text and create link facets
+  detectFacets(text: string): Array<{ index: { byteStart: number; byteEnd: number }; features: Array<{ $type: string; uri: string }> }> {
+    const encoder = new TextEncoder();
+    const facets: Array<{ index: { byteStart: number; byteEnd: number }; features: Array<{ $type: string; uri: string }> }> = [];
+    const urlRegex = /https?:\/\/[^\s<>\[\]()]+/g;
+    let match;
+
+    while ((match = urlRegex.exec(text)) !== null) {
+      const beforeBytes = encoder.encode(text.slice(0, match.index)).byteLength;
+      const matchBytes = encoder.encode(match[0]).byteLength;
+      facets.push({
+        index: { byteStart: beforeBytes, byteEnd: beforeBytes + matchBytes },
+        features: [{ $type: 'app.bsky.richtext.facet#link', uri: match[0] }],
+      });
+    }
+
+    return facets;
+  }
+
   // Create post
-  async createPost(text: string, reply?: { root: { uri: string; cid: string }; parent: { uri: string; cid: string } }): Promise<{ uri: string; cid: string }> {
+  async createPost(
+    text: string,
+    reply?: { root: { uri: string; cid: string }; parent: { uri: string; cid: string } },
+    embed?: Record<string, unknown>,
+    facets?: Array<Record<string, unknown>>,
+  ): Promise<{ uri: string; cid: string }> {
     await this.ensureSession();
     const record: Record<string, unknown> = {
       $type: 'app.bsky.feed.post',
@@ -147,6 +228,11 @@ export class BlueskyClient {
       createdAt: new Date().toISOString(),
     };
     if (reply) record.reply = reply;
+    if (embed) record.embed = embed;
+
+    const detectedFacets = this.detectFacets(text);
+    const allFacets = [...detectedFacets, ...(facets ?? [])];
+    if (allFacets.length > 0) record.facets = allFacets;
 
     return this.makeRequest('com.atproto.repo.createRecord', {
       repo: this.did!,

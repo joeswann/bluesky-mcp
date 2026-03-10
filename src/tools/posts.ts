@@ -11,6 +11,7 @@ const threadSchema = z.object({
 const createSchema = z.object({
   text: z.string().min(1).max(300),
   reply_to: z.string().optional(),
+  url: z.string().url().optional(),
 });
 
 const deleteSchema = z.object({
@@ -51,12 +52,13 @@ export const getPostThreadHandler = async (client: BlueskyClient, args: Record<s
 
 export const createPostDefinition = {
   name: 'create_post',
-  description: 'Create a new post on Bluesky. Optionally reply to an existing post.',
+  description: 'Create a new post on Bluesky. Supports link card embeds (external URL with auto-fetched title/description/thumbnail) and auto-detected URL facets for clickable links in text.',
   inputSchema: {
     type: 'object' as const,
     properties: {
-      text: { type: 'string', description: 'Post text (max 300 chars)' },
+      text: { type: 'string', description: 'Post text (max 300 chars). URLs in text are auto-detected and made clickable.' },
       reply_to: { type: 'string', description: 'AT URI of post to reply to (optional)' },
+      url: { type: 'string', description: 'URL to attach as a link card embed with auto-fetched metadata (optional)' },
     },
     required: ['text'],
   },
@@ -64,7 +66,7 @@ export const createPostDefinition = {
 
 export const createPostHandler = async (client: BlueskyClient, args: Record<string, unknown>) => {
   try {
-    const { text, reply_to } = createSchema.parse(args);
+    const { text, reply_to, url } = createSchema.parse(args);
 
     let reply: { root: { uri: string; cid: string }; parent: { uri: string; cid: string } } | undefined;
 
@@ -86,7 +88,16 @@ export const createPostHandler = async (client: BlueskyClient, args: Record<stri
       };
     }
 
-    const result = await client.createPost(text, reply);
+    let embed: Record<string, unknown> | undefined;
+    if (url) {
+      const meta = await client.fetchUrlMeta(url);
+      embed = {
+        $type: 'app.bsky.embed.external',
+        external: meta,
+      };
+    }
+
+    const result = await client.createPost(text, reply, embed);
     return {
       content: [{
         type: 'text' as const,
