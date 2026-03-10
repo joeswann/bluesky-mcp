@@ -118,11 +118,6 @@ export class BlueskyClient {
     return this.did;
   }
 
-  getHandle(): string {
-    if (!this.handle) throw new Error('No active session');
-    return this.handle;
-  }
-
   // Profile
   async getProfile(actor: string): Promise<ProfileView> {
     return this.makeRequest<ProfileView>('app.bsky.actor.getProfile', { actor });

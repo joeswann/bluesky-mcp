@@ -1,7 +1,6 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { z, ZodError } from 'zod';
 import type { BlueskyClient } from '../api/client.js';
-import { parseAtUri } from '../api/client.js';
 import { formatThread } from './format.js';
 
 const threadSchema = z.object({

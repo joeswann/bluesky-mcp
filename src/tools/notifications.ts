@@ -45,13 +45,6 @@ export const handler = async (client: BlueskyClient, args: Record<string, unknow
     const { limit, cursor } = schema.parse(args);
     const res = await client.listNotifications(limit, cursor);
 
-    const grouped: Record<string, Notification[]> = {};
-    for (const n of res.notifications) {
-      const key = n.reason;
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(n);
-    }
-
     const lines = res.notifications.map((n, i) => formatNotification(n, i));
     if (res.cursor) lines.push(`\n--- cursor: ${res.cursor} ---`);
 
