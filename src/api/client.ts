@@ -7,9 +7,27 @@ export class BlueskyClient {
   private refreshJwt: string | null = null;
   private did: string | null = null;
   private handle: string | null = null;
+  onSession?: (session: Session) => void;
 
   constructor(config: Config) {
     this.config = config;
+  }
+
+  hydrate(session: Session): void {
+    this.accessJwt = session.accessJwt;
+    this.refreshJwt = session.refreshJwt;
+    this.did = session.did;
+    this.handle = session.handle;
+  }
+
+  getSession(): Session | null {
+    if (!this.accessJwt || !this.refreshJwt || !this.did || !this.handle) return null;
+    return { did: this.did, handle: this.handle, accessJwt: this.accessJwt, refreshJwt: this.refreshJwt };
+  }
+
+  private persist(): void {
+    const session = this.getSession();
+    if (session) this.onSession?.(session);
   }
 
   private async createSession(): Promise<void> {
@@ -33,6 +51,7 @@ export class BlueskyClient {
     this.refreshJwt = session.refreshJwt;
     this.did = session.did;
     this.handle = session.handle;
+    this.persist();
   }
 
   private async refreshSessionToken(): Promise<void> {
@@ -57,6 +76,7 @@ export class BlueskyClient {
     this.refreshJwt = session.refreshJwt;
     this.did = session.did;
     this.handle = session.handle;
+    this.persist();
   }
 
   private async ensureSession(): Promise<void> {
@@ -116,6 +136,11 @@ export class BlueskyClient {
   getDid(): string {
     if (!this.did) throw new Error('No active session');
     return this.did;
+  }
+
+  getHandle(): string {
+    if (!this.handle) throw new Error('No active session');
+    return this.handle;
   }
 
   // Profile

@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 import { createServer } from './server.js';
+import { runCli } from './cli/run.js';
 
-async function main() {
-  try {
+const main = async (): Promise<void> => {
+  const [first, ...rest] = process.argv.slice(2);
+  if (first === '--mcp') {
     await createServer();
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
+    return;
   }
-}
+  await runCli(first ? [first, ...rest] : []);
+};
 
 main().catch((error) => {
-  console.error('Unhandled error:', error);
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`${message}\n`);
   process.exit(1);
 });

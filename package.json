@@ -4,8 +4,10 @@
   "type": "module",
   "main": "./build/index.js",
   "bin": {
-    "bluesky-mcp": "./build/index.js"
+    "bluesky-mcp": "./build/index.js",
+    "bluesky-cli": "./build/index.js"
   },
+  "packageManager": "pnpm@11.0.1",
   "files": [
     "build",
     "README.md"
@@ -14,7 +16,7 @@
     "build": "tsc && chmod +x build/index.js",
     "dev": "tsc --watch",
     "start": "node build/index.js",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "pnpm run build"
   },
   "engines": {
     "node": ">=18.0.0"
