@@ -1,6 +1,34 @@
 import { type Config } from '../config/index.js';
 import type { AtUri, FeedViewPost, Notification, PostView, ProfileView, Session, ThreadViewPost } from './types.js';
 
+/**
+ * Whether a response means "your access token has expired", which is the cue to
+ * refresh and retry.
+ *
+ * A PDS does not answer 401 for an expired access token; it answers 400 with
+ * {"error":"ExpiredToken"}. Testing status === 401 alone therefore never
+ * refreshed, so the cached session could not heal itself: every command failed
+ * with "Token has expired" while a valid refresh token sat unused beside it.
+ * This tool was dead from 2026-07-11 to 2026-08-13 for exactly that reason.
+ *
+ * Access tokens last about two hours, and persist() is only reached from
+ * createSession and refreshSessionToken — never the success path — so without
+ * this the tool breaks again every two hours, permanently.
+ *
+ * The body is read from a clone, because the caller still needs the original
+ * stream.
+ */
+const isExpiredToken = async (res: Response): Promise<boolean> => {
+  if (res.status === 401) return true;
+  if (res.status !== 400) return false;
+  try {
+    const body = (await res.clone().json()) as { error?: string };
+    return body.error === 'ExpiredToken' || body.error === 'InvalidToken';
+  } catch {
+    return false;
+  }
+};
+
 export class BlueskyClient {
   private config: Config;
   private accessJwt: string | null = null;
@@ -120,7 +148,7 @@ export class BlueskyClient {
 
     let res = await doRequest();
 
-    if (res.status === 401) {
+    if (await isExpiredToken(res)) {
       await this.refreshSessionToken();
       res = await doRequest();
     }
